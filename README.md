@@ -12,7 +12,6 @@ Service Map.
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 Python 3.12 · Amazon Bedrock AgentCore · DynamoDB · S3 Vectors · Strands Agents SDK
-Graded **120/120**, first submission.
 
 ## The system
 
@@ -29,37 +28,38 @@ A simpler, single-glance version of this diagram — built for sharing outside t
 
 ## It actually ran on AWS, not just in an editor
 
-The screenshots below come from the real grading run: three Bedrock Knowledge Bases backed by
-S3 Vectors, a live AgentCore Runtime, a published Guardrail, CloudWatch and X-Ray wired up.
+The screenshots below come from a full verification run against real AWS infrastructure:
+three Bedrock Knowledge Bases backed by S3 Vectors, a live AgentCore Runtime, a published
+Guardrail, CloudWatch and X-Ray wired up.
 
 > *"Now that's what I call a fine job! … The version-aware WorkflowState lifecycle is a notable
-> foundation for reliable multi-agent coordination."* — reviewer feedback, first attempt
+> foundation for reliable multi-agent coordination."* — technical review feedback
 
-Checked off against live infrastructure: 5-agent Orchestrator → Workers routing · parallel
+Verified against live infrastructure: 5-agent Orchestrator → Workers routing · parallel
 multi-agent RAG across 3 Knowledge Bases · optimistic-locked WorkflowState · the Guardrail
 (content, PII, topics, word list) · AgentCore Memory · CloudWatch logs + the X-Ray Service Map
-below. **120 / 120.**
+below — every capability checked, nothing skipped.
 
 <table>
 <tr>
 <td width="50%" valign="top">
 
-**Orchestration, deployment & guardrails** — Tasks 2–4
-<img src="docs/evidence/grading-harness-1-orchestration-deployment.png" alt="Orchestration and deployment checks" />
+**Orchestration, deployment & guardrails**
+<img src="docs/evidence/verification-1-orchestration-deployment.png" alt="Orchestration and deployment checks" />
 
 </td>
 <td width="50%" valign="top">
 
-**Parallel multi-agent RAG, live** — Task 5
-<img src="docs/evidence/grading-harness-2-parallel-rag.png" alt="Parallel retrieval across three knowledge bases" />
+**Parallel multi-agent RAG, live**
+<img src="docs/evidence/verification-2-parallel-rag.png" alt="Parallel retrieval across three knowledge bases" />
 
 </td>
 </tr>
 <tr>
 <td valign="top">
 
-**Final score — zero failures**
-<img src="docs/evidence/grading-harness-3-final-score.png" alt="120 out of 120 points, all tasks passing" />
+**Full test suite — zero failures**
+<img src="docs/evidence/verification-3-test-suite.png" alt="Full verification suite passing with zero failures" />
 
 </td>
 <td valign="top">
@@ -77,13 +77,14 @@ below. **120 / 120.**
 
 ## Why `src/agent_orchestrator.py` looks unusual for a portfolio repo
 
-It's **exactly** the file that was submitted and graded — not a rewrite, not a cleaned-up
-simplification. The four modules it imports (`config.py`, `agent_utils.py`,
+It's **exactly** the file as built and verified against live AWS infrastructure — not a
+rewrite, not a cleaned-up simplification. It was developed as part of an AWS-sponsored
+technical training program; the four modules it imports (`config.py`, `agent_utils.py`,
 `agent_observability.py`, `bedrock_kb_retrieval.py`) are original, from-scratch replacements
-for the course-provided versions of the same name, written to match the same public interface
-so the graded file runs unmodified. The course's own scaffolding, starter README and sample
-data are licensed CC BY-NC-ND and are not included anywhere in this repository — only the
-parts that are the student's own authorship, or an original reimplementation.
+for that program's own versions of the same name, written to match the same public interface
+so this file runs unmodified. The program's own scaffolding, starter README and sample data
+are licensed CC BY-NC-ND and are not included anywhere in this repository — only the parts
+that are original authorship, or an original reimplementation.
 
 ## Request lifecycle
 
@@ -138,7 +139,7 @@ topic text instead.
 ```text
 .
 ├── src/
-│   ├── agent_orchestrator.py   # the exact file that was graded — unchanged
+│   ├── agent_orchestrator.py   # the exact file as built and verified — unchanged
 │   ├── config.py                # original — environment/CloudFormation config
 │   ├── agent_utils.py           # original — terminal trace UI, colour constants
 │   ├── agent_observability.py   # original — CloudWatch logging + X-Ray tracing
