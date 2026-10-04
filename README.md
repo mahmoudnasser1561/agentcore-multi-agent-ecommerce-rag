@@ -1,47 +1,44 @@
-<div align="center">
+# NovaMart Multi-Agent Support
 
-# 🛒 NovaMart Multi-Agent Support
-
-**A five-agent, production-shaped e-commerce support system on Amazon Bedrock AgentCore** — an
-Orchestrator routes customer requests to four specialist workers, one of which runs its own
-internal multi-agent RAG fan-out across three Bedrock Knowledge Bases in parallel. Every agent
-shares one optimistic-locked DynamoDB record, runs behind a Bedrock Guardrail, and is traced
-end-to-end on the X-Ray Service Map.
+A five-agent e-commerce support system on Amazon Bedrock AgentCore, built for a fictional
+company called NovaMart. One Orchestrator routes each customer request to four specialist
+workers — Inventory, Refund, Policy, Communication — and the Policy worker is itself a small
+multi-agent system, fanning a single question out to three Bedrock Knowledge Bases in
+parallel. Every agent coordinates through one optimistic-locked DynamoDB record, runs behind
+a shared Bedrock Guardrail, and the whole request graph is traceable end-to-end on the X-Ray
+Service Map.
 
 [![CI](https://github.com/mahmoudnasser1561/agentcore-multi-agent-ecommerce-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/mahmoudnasser1561/agentcore-multi-agent-ecommerce-rag/actions/workflows/ci.yml)
-![Python](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)
-![AWS](https://img.shields.io/badge/AWS-Bedrock%20AgentCore-FF9900?logo=amazonaws&logoColor=white)
-![Score](https://img.shields.io/badge/graded%20score-120%2F120-2ea44f)
-![License](https://img.shields.io/badge/license-MIT-blue)
+![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
-| 🧭 **5 agents** | 📚 **Multi-agent RAG** | 🔒 **Optimistic locking** | 🛡️ **Guardrails** | 🧠 **Session memory** | 📊 **Full observability** |
-|:-:|:-:|:-:|:-:|:-:|:-:|
-| Orchestrator → 4 workers | 3 KBs in parallel | versioned WorkflowState | content/PII/topic policy | AgentCore Memory | CloudWatch + X-Ray |
+Python 3.12 · Amazon Bedrock AgentCore · DynamoDB · S3 Vectors · Strands Agents SDK
+Graded **120/120**, first submission.
 
-</div>
-
----
-
-## 🏗️ Architecture at a glance
+## The system
 
 ![Architecture](docs/diagrams/architecture.png)
 
-The Orchestrator (Claude Haiku 4.5 — cheap, fast routing) never answers the customer itself. It
-calls exactly one worker (Claude Sonnet 4.5) per step and persists that worker's result to a
-shared DynamoDB row before deciding what happens next. The Policy worker is itself a small
-multi-agent system: three single-purpose retriever sub-agents, one per Knowledge Base, queried
-concurrently through a `ThreadPoolExecutor`.
+The Orchestrator runs a fast, cheap routing model and never answers the customer directly —
+it calls exactly one worker per step (a stronger reasoning model) and persists that worker's
+result to a shared DynamoDB row before deciding what happens next. The Policy worker holds
+three single-purpose retriever sub-agents, one per Knowledge Base, queried concurrently
+through a `ThreadPoolExecutor` rather than in sequence.
 
----
+A simpler, single-glance version of this diagram — built for sharing outside the repo — is at
+`docs/diagrams/overview-agentic-system.svg`.
 
-## 🎬 Proof it's deployed, not just written
+## It actually ran on AWS, not just in an editor
 
-These are screenshots from the actual grading run against real AWS infrastructure — three
-Bedrock Knowledge Bases backed by S3 Vectors, a live AgentCore Runtime, a published Guardrail,
-and CloudWatch/X-Ray wired up. **Score: 120/120.**
+The screenshots below come from the real grading run: three Bedrock Knowledge Bases backed by
+S3 Vectors, a live AgentCore Runtime, a published Guardrail, CloudWatch and X-Ray wired up.
 
 > *"Now that's what I call a fine job! … The version-aware WorkflowState lifecycle is a notable
 > foundation for reliable multi-agent coordination."* — reviewer feedback, first attempt
+
+Checked off against live infrastructure: 5-agent Orchestrator → Workers routing · parallel
+multi-agent RAG across 3 Knowledge Bases · optimistic-locked WorkflowState · the Guardrail
+(content, PII, topics, word list) · AgentCore Memory · CloudWatch logs + the X-Ray Service Map
+below. **120 / 120.**
 
 <table>
 <tr>
@@ -74,20 +71,27 @@ and CloudWatch/X-Ray wired up. **Score: 120/120.**
 </tr>
 </table>
 
-<div align="center">
 <img src="docs/evidence/xray-service-map-detail.png" alt="X-Ray service map, detail view" width="75%" />
-<br/><sub>Orchestrator → 5 agent nodes → 3 knowledge base nodes, one trace per customer request</sub>
-</div>
 
----
+*Orchestrator → 5 agent nodes → 3 knowledge base nodes, one trace per customer request.*
 
-## 🔄 How one request flows
+## Why `src/agent_orchestrator.py` looks unusual for a portfolio repo
+
+It's **exactly** the file that was submitted and graded — not a rewrite, not a cleaned-up
+simplification. The four modules it imports (`config.py`, `agent_utils.py`,
+`agent_observability.py`, `bedrock_kb_retrieval.py`) are original, from-scratch replacements
+for the course-provided versions of the same name, written to match the same public interface
+so the graded file runs unmodified. The course's own scaffolding, starter README and sample
+data are licensed CC BY-NC-ND and are not included anywhere in this repository — only the
+parts that are the student's own authorship, or an original reimplementation.
+
+## Request lifecycle
 
 ![Request flow](docs/diagrams/request-flow.png)
 
-Every routing tool follows the same pattern: read WorkflowState's current `version`, run the
-worker, write the result back under that version. The write is a **conditional** DynamoDB
-update — it only succeeds if `version` still matches what was just read.
+Every routing tool shares one pattern: read WorkflowState's current `version`, run the worker,
+write the result back conditioned on that version. The write only succeeds if `version` still
+matches what was just read.
 
 ```mermaid
 stateDiagram-v2
@@ -101,55 +105,35 @@ stateDiagram-v2
     conflict --> v1 : re-read current version, retry (max 3x)
 ```
 
-A lost race doesn't corrupt state or silently drop a result — it retries against a fresh read,
+A lost race doesn't corrupt state or drop a result silently — it retries against a fresh read,
 up to three times, then raises rather than looping forever.
 
----
-
-## 📚 Multi-agent RAG — three knowledge bases, one round trip
+## Multi-agent RAG: three knowledge bases, one round trip
 
 ![Parallel RAG](docs/diagrams/parallel-rag.png)
 
-The PolicyAgent's `search_all_policies` tool doesn't query three knowledge bases in sequence —
-it fans the question out to three retriever sub-agents concurrently via `ThreadPoolExecutor`,
-so a question touching all three domains (returns, shipping, warranty) costs one round trip's
-wall-clock time, not three. A single retriever failing — a transient KB error — is reported
-inline in its slot; it never aborts the other two.
+`search_all_policies` doesn't query three knowledge bases in sequence — it fans the question
+out to three retriever sub-agents concurrently, so a question touching all three domains
+(returns, shipping, warranty) costs one round trip's wall-clock time, not three. A single
+retriever failing — a transient KB error — is reported inline in its own slot and never
+aborts the other two.
 
----
+## Tuning the guardrail against a real false positive
 
-## 🛡️ Guardrails — safety without blocking legitimate math
-
-A Bedrock Guardrail is attached to **every** agent's model via one call
+A Bedrock Guardrail attaches to every agent's model through one call
 (`model.update_config(guardrail_id=..., guardrail_version=...)`), so a single policy change
-takes effect across the whole graph at once. Three STANDARD-tier DENY topics: competitor
-products, pricing negotiations, legal threats — plus content filters, PII redaction, and a
-profanity word list.
+takes effect across the whole graph at once. It carries three STANDARD-tier DENY topics —
+competitor products, pricing negotiations, legal threats — plus content filters, PII
+redaction, and a profanity word list.
 
-The "pricing negotiations" topic is deliberately **narrow**: it blocks a customer trying to
-haggle NovaMart down from an advertised price, but explicitly *excludes* arithmetic using a
-price and discount the customer already stated. An early CLASSIC-tier version of this topic
-was broad enough to block *"what's 15% off $120?"* — a real failure caught during verification,
-not a hypothetical — which is why the final guardrail uses STANDARD tier with narrowly-scoped
-topic definitions instead.
+The "pricing negotiations" topic is deliberately narrow: it blocks a customer haggling
+NovaMart down from an advertised price, but explicitly excludes arithmetic using a price and
+discount the customer already stated. An earlier, CLASSIC-tier version of this topic was wide
+enough to block *"what's 15% off $120?"* outright — caught during live verification, not a
+hypothetical — which is why the shipped guardrail uses STANDARD tier with narrowly-scoped
+topic text instead.
 
----
-
-## ✅ What was verified where
-
-| Capability | Live deployment (the grading run) |
-|---|:-:|
-| 5-agent Orchestrator → Workers routing | ✅ |
-| Parallel multi-agent RAG (3 Knowledge Bases, S3 Vectors) | ✅ |
-| Optimistic-locked WorkflowState | ✅ |
-| Bedrock Guardrail (content, PII, topics, word list) | ✅ |
-| AgentCore Memory (session summaries) | ✅ |
-| CloudWatch logs + X-Ray Service Map | ✅ |
-| **Graded score** | **120 / 120** |
-
----
-
-## 📂 What's in this repository
+## Repository layout
 
 ```text
 .
@@ -160,32 +144,25 @@ topic definitions instead.
 │   ├── agent_observability.py   # original — CloudWatch logging + X-Ray tracing
 │   └── bedrock_kb_retrieval.py  # original — Knowledge Base Retrieve wrapper
 ├── docs/
-│   ├── diagrams/                # PNG exports of the diagrams above
+│   ├── diagrams/                # the diagrams above, plus a simpler standalone overview
 │   └── evidence/                # screenshots from the real deployment
 ├── .env.example
 └── .github/workflows/ci.yml     # lint + import/wiring check on every push
 ```
 
-`src/agent_orchestrator.py` is **exactly** the file that was submitted and graded — not a
-rewrite, not a simplification. The four modules it imports were written as original, minimal
-replacements for the course-provided versions of the same name, which are licensed
-CC BY-NC-ND and can't be redistributed; this repo never includes any of the original course
-scaffolding, starter README, or sample data. Everything under `src/` here is either the
-student's own work or an original reimplementation of the same public interface.
+## Running it
 
----
-
-## 🚀 Run it
+Offline — no AWS account needed, this is what CI runs on every push:
 
 ```bash
 uv sync
-uv run ruff check .                                           # lint
+uv run ruff check .
 AWS_ACCESS_KEY_ID=testing AWS_SECRET_ACCESS_KEY=testing \
   uv run python -c "import sys; sys.path.insert(0, 'src'); \
-  import agent_orchestrator; agent_orchestrator.build_agent_graph()"   # builds offline, no AWS needed
+  import agent_orchestrator; agent_orchestrator.build_agent_graph()"
 ```
 
-Running it against real data needs your own AWS account: three DynamoDB tables, three Bedrock
+Against real data, you'll need your own AWS account: three DynamoDB tables, three Bedrock
 Knowledge Bases backed by S3 Vectors, an AgentCore execution role, and a deployed AgentCore
 Runtime. `.env.example` lists every value `config.py` expects.
 
@@ -197,21 +174,4 @@ python src/agent_orchestrator.py deploy   # guardrail, runtime, memory, observab
 
 ---
 
-## 🧰 Skills demonstrated
-
-| Area | Where to look |
-|---|---|
-| Multi-agent orchestration (Orchestrator → Workers) | `build_orchestrator_agent`, `build_agent_graph` |
-| Multi-agent RAG, concurrent retrieval | `build_policy_agent` (`search_all_policies`) |
-| Distributed state with optimistic locking | `_create_workflow_state`, `_update_workflow_state` |
-| Enterprise guardrails, verified against live traffic | `create_guardrail` |
-| AgentCore Runtime deployment, Memory, observability | `deploy_to_agentcore_runtime`, `configure_memory`, `configure_observability` |
-| Production tracing (CloudWatch + X-Ray) | `src/agent_observability.py` |
-
----
-
-<div align="center">
-
-Built by **Mahmoud** ([@mahmoudnasser1561](https://github.com/mahmoudnasser1561)) · MIT licensed
-
-</div>
+Mahmoud — [github.com/mahmoudnasser1561](https://github.com/mahmoudnasser1561). Licensed MIT, see [`LICENSE`](LICENSE).
