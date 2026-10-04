@@ -1,0 +1,29 @@
+[project]
+name = "agentcore-multi-agent-ecommerce-rag"
+version = "0.1.0"
+description = "Five-agent e-commerce support system on Amazon Bedrock AgentCore: Orchestrator/Workers hierarchy, parallel multi-agent RAG across three knowledge bases, optimistic-locked shared state, guardrails and full observability."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "boto3>=1.35",
+    "strands-agents>=1.28.0",
+    "python-dotenv>=1.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.6",
+]
+# Only needed on the machine that deploys / serves the AgentCore Runtime.
+deploy = [
+    "bedrock-agentcore>=1.0",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
